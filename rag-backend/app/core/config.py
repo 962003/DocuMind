@@ -25,8 +25,17 @@ class Settings(BaseSettings):
     EMBEDDING_DIMS: int = 384
     LLM_PROVIDER: str = "ollama"
     LLM_MODEL: str = "llama3"
+    LLM_MAX_TOKENS: int = 128
+    LLM_TEMPERATURE: float = 0.1
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     GROQ_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_SITE_URL: str = ""
+    OPENROUTER_APP_NAME: str = "RAG Backend"
+    # Backward-compatible key name used in existing .env files.
+    API_KEY: str = ""
     DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/rag_db"
     # Optional backend auth key for incoming API requests.
     # Keep empty to disable request-header auth.
@@ -35,6 +44,11 @@ class Settings(BaseSettings):
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
+    ANSWER_MAX_CONTEXT_CHUNKS: int = 3
+    ANSWER_MAX_CONTEXT_CHARS: int = 3000
+    ANSWER_MAX_CHARS: int = 2500
+    WARMUP_EMBEDDINGS_ON_STARTUP: bool = True
+    WARMUP_LLM_ON_STARTUP: bool = True
 
 
 settings = Settings()
