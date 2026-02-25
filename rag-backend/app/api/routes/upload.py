@@ -1,14 +1,15 @@
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import enforce_rate_limit, require_api_key
 from app.core.config import settings
 from app.db.session import get_db
+from app.models import PDFDocument
 from app.schemas.upload import UploadResponse
-from app.services.ingestion import ingest_pdf
+from app.services.ingestion import process_pdf_document_in_background
 
 router = APIRouter(tags=["upload"])
 route_dependencies = [Depends(enforce_rate_limit)]
@@ -20,6 +21,7 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload", response_model=UploadResponse, dependencies=route_dependencies)
 async def upload_pdf(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -43,15 +45,25 @@ async def upload_pdf(
     with open(file_path, "wb") as buffer:
         buffer.write(contents)
 
-    try:
-        document_id, chunk_count = ingest_pdf(db=db, file_path=file_path, original_filename=file.filename)
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
+    pdf_record = PDFDocument(
+        filename=file.filename,
+        file_size=len(contents),
+        chunk_count=0,
+        index_status="processing",
+    )
+    db.add(pdf_record)
+    db.commit()
+    db.refresh(pdf_record)
+
+    background_tasks.add_task(
+        process_pdf_document_in_background,
+        str(pdf_record.id),
+        file_path,
+    )
 
     return UploadResponse(
-        message="PDF uploaded and indexed successfully",
-        chunks_created=chunk_count,
-        document_id=document_id,
-        index_status="completed" if chunk_count > 0 else "failed",
+        message="Document uploaded successfully. Indexing started.",
+        chunks_created=0,
+        document_id=pdf_record.id,
+        index_status="processing",
     )

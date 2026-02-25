@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import axios from "axios"
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "")
@@ -121,10 +121,56 @@ function UserMessage({ content }) {
 export default function Home() {
   const [file, setFile] = useState(null)
   const [uuid, setUuid] = useState(null)
+  const [documentReady, setDocumentReady] = useState(false)
   const [question, setQuestion] = useState("")
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState("")
+
+  useEffect(() => {
+    if (!uuid) return
+
+    let cancelled = false
+    let timerId = null
+
+    const pollStatus = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/document-status/${uuid}`, {
+          headers: {
+            ...getAuthHeaders(),
+          },
+        })
+        if (cancelled) return
+
+        const nextStatus = res.data.index_status
+        if (nextStatus === "completed") {
+          setDocumentReady(true)
+          setStatus("Document uploaded successfully.")
+          return
+        }
+        if (nextStatus === "failed") {
+          setDocumentReady(false)
+          setStatus(`Indexing failed: ${res.data.error_message || "Unknown error"}`)
+          return
+        }
+
+        setDocumentReady(false)
+        setStatus("Document uploaded. Indexing in progress...")
+        timerId = setTimeout(pollStatus, 2000)
+      } catch (error) {
+        if (cancelled) return
+        setDocumentReady(false)
+        setStatus(`Status check failed: ${formatError(error, "Unknown status error")}`)
+        timerId = setTimeout(pollStatus, 3000)
+      }
+    }
+
+    pollStatus()
+    return () => {
+      cancelled = true
+      if (timerId) clearTimeout(timerId)
+    }
+  }, [uuid])
 
   const uploadFile = async () => {
     if (!file) {
@@ -142,8 +188,9 @@ export default function Home() {
           ...getAuthHeaders(),
         },
       })
+      setDocumentReady(false)
       setUuid(res.data.document_id)
-      setStatus("Document uploaded successfully.")
+      setStatus("Document uploaded. Indexing in progress...")
     } catch (error) {
       setStatus(`Upload failed: ${formatError(error, "Unknown upload error")}`)
     }
@@ -151,6 +198,10 @@ export default function Home() {
 
   const askQuestion = async () => {
     if (!question || !uuid) return
+    if (!documentReady) {
+      setStatus("Please wait. Document indexing is still in progress.")
+      return
+    }
 
     setLoading(true)
     setStatus("Asking...")
@@ -250,7 +301,7 @@ export default function Home() {
 
           <button
             onClick={askQuestion}
-            disabled={!uuid || loading}
+            disabled={!uuid || !documentReady || loading}
             className="ml-4 bg-gray-800 text-white px-5 py-2 rounded-xl disabled:opacity-40 transition"
           >
             Ask
