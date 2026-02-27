@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from typing import List
 
 from elasticsearch import Elasticsearch
@@ -13,6 +14,8 @@ from app.db.session import SessionLocal
 from app.models import DocumentChunk, PDFDocument
 from app.services.embeddings import get_embeddings
 
+logger = logging.getLogger(__name__)
+
 
 def _get_es_client() -> Elasticsearch:
     return Elasticsearch(
@@ -25,19 +28,49 @@ def _ensure_index(es: Elasticsearch, dims: int) -> None:
     if es.indices.exists(index=settings.INDEX_NAME):
         return
 
-    es.indices.create(
-        index=settings.INDEX_NAME,
-        body={
-            "mappings": {
-                "properties": {
-                    "content": {"type": "text"},
-                    "chunk_id": {"type": "keyword"},
-                    "document_id": {"type": "keyword"},
-                    "embedding": {"type": "dense_vector", "dims": dims},
-                }
+    base_properties = {
+        "content": {"type": "text"},
+        "chunk_id": {"type": "keyword"},
+        "chunk_index": {"type": "integer"},
+        "document_id": {"type": "keyword"},
+    }
+    legacy_mapping = {
+        "mappings": {
+            "properties": {
+                **base_properties,
+                "embedding": {"type": "dense_vector", "dims": dims},
             }
         },
-    )
+    }
+    hnsw_mapping = {
+        "mappings": {
+            "properties": {
+                **base_properties,
+                "embedding": {
+                    "type": "dense_vector",
+                    "dims": dims,
+                    "index": True,
+                    "similarity": "cosine",
+                    "index_options": {
+                        "type": "hnsw",
+                        "m": settings.HNSW_M,
+                        "ef_construction": settings.HNSW_EF_CONSTRUCTION,
+                    },
+                },
+            }
+        },
+    }
+
+    if settings.ENABLE_HNSW_INDEX:
+        try:
+            es.indices.create(index=settings.INDEX_NAME, body=hnsw_mapping)
+            return
+        except Exception as exc:
+            logger.warning("HNSW index mapping not supported; falling back to dense_vector script_score mapping: %s", exc)
+            if es.indices.exists(index=settings.INDEX_NAME):
+                return
+
+    es.indices.create(index=settings.INDEX_NAME, body=legacy_mapping)
 
 
 @retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3), reraise=True)
@@ -94,6 +127,7 @@ def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path
                 "content": chunk.page_content,
                 "embedding": vector,
                 "chunk_id": str(chunk_record.id),
+                "chunk_index": idx,
                 "document_id": str(pdf_record.id),
             },
         )
@@ -121,7 +155,7 @@ def ingest_pdf(db: Session, file_path: str, original_filename: str) -> tuple[uui
     return pdf_record.id, chunk_count
 
 
-def process_pdf_document_in_background(document_id: str, file_path: str) -> None:
+def process_pdf_document_job(document_id: str, file_path: str) -> None:
     db = SessionLocal()
     parsed_id = uuid.UUID(document_id)
     try:
@@ -139,5 +173,6 @@ def process_pdf_document_in_background(document_id: str, file_path: str) -> None
             pdf_record.index_status = "failed"
             pdf_record.error_message = str(exc)[:2000]
             db.commit()
+        raise
     finally:
         db.close()

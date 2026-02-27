@@ -1,27 +1,28 @@
 import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import enforce_rate_limit, require_api_key
+from app.api.deps import enforce_rate_limit, require_api_key, require_jwt_token
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import PDFDocument
 from app.schemas.upload import UploadResponse
-from app.services.ingestion import process_pdf_document_in_background
+from app.worker.tasks import process_pdf_document_task
 
 router = APIRouter(tags=["upload"])
 route_dependencies = [Depends(enforce_rate_limit)]
 if settings.BACKEND_API_KEY:
     route_dependencies.append(Depends(require_api_key))
+if settings.JWT_AUTH_ENABLED:
+    route_dependencies.append(Depends(require_jwt_token))
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload", response_model=UploadResponse, dependencies=route_dependencies)
 async def upload_pdf(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -55,11 +56,13 @@ async def upload_pdf(
     db.commit()
     db.refresh(pdf_record)
 
-    background_tasks.add_task(
-        process_pdf_document_in_background,
-        str(pdf_record.id),
-        file_path,
-    )
+    try:
+        process_pdf_document_task.delay(str(pdf_record.id), file_path)
+    except Exception as exc:
+        pdf_record.index_status = "failed"
+        pdf_record.error_message = f"Queue publish failed: {exc}"
+        db.commit()
+        raise HTTPException(status_code=500, detail="Failed to enqueue ingestion job") from exc
 
     return UploadResponse(
         message="Document uploaded successfully. Indexing started.",

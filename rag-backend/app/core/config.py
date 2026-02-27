@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     ELASTIC_USER: str = "elastic"
     ELASTIC_PASSWORD: str = "changeme"
     INDEX_NAME: str = "rag_documents"
+    ENABLE_HYBRID_SEARCH: bool = True
+    HYBRID_VECTOR_WEIGHT: float = 0.65
+    HYBRID_KEYWORD_WEIGHT: float = 0.35
+    HYBRID_RRF_K: int = 60
+    HYBRID_CANDIDATE_MULTIPLIER: int = 3
+    ENABLE_HNSW_INDEX: bool = True
+    HNSW_M: int = 16
+    HNSW_EF_CONSTRUCTION: int = 100
 
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIMS: int = 384
@@ -34,8 +42,13 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = ""
     OPENROUTER_APP_NAME: str = "RAG Backend"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     # Backward-compatible key name used in existing .env files.
     API_KEY: str = ""
+    JWT_AUTH_ENABLED: bool = False
+    JWT_SECRET_KEY: str = ""
+    JWT_ALGORITHM: str = "HS256"
     DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/rag_db"
     # Optional backend auth key for incoming API requests.
     # Keep empty to disable request-header auth.

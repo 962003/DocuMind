@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import enforce_rate_limit, require_api_key
+from app.api.deps import enforce_rate_limit, require_api_key, require_jwt_token
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import PDFDocument
@@ -13,6 +13,8 @@ router = APIRouter(tags=["document-status"])
 route_dependencies = [Depends(enforce_rate_limit)]
 if settings.BACKEND_API_KEY:
     route_dependencies.append(Depends(require_api_key))
+if settings.JWT_AUTH_ENABLED:
+    route_dependencies.append(Depends(require_jwt_token))
 
 
 @router.get(

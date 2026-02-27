@@ -8,6 +8,14 @@ class AskRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=10)
 
 
+class Citation(BaseModel):
+    chunk_id: str
+    chunk_index: int | None = None
+    score: float
+    snippet: str
+
+
 class AskResponse(BaseModel):
     answer: str
     document_id: UUID
+    citations: list[Citation] = []

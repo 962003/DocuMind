@@ -205,33 +205,63 @@ export default function Home() {
 
     setLoading(true)
     setStatus("Asking...")
-    setMessages((prev) => [...prev, { role: "user", content: question }])
+    const userText = question
+    const assistantId = `assistant-${Date.now()}`
+    setMessages((prev) => [
+      ...prev,
+      { id: `user-${Date.now()}`, role: "user", content: userText },
+      { id: assistantId, role: "assistant", content: "" },
+    ])
+    setQuestion("")
 
     try {
-      const res = await axios.post(
-        `${API_BASE_URL}/ask`,
-        {
-          question,
-          document_id: uuid,
+      const res = await fetch(`${API_BASE_URL}/ask/stream`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...getAuthHeaders(),
         },
-        {
-          headers: {
-            ...getAuthHeaders(),
-          },
-        }
-      )
+        body: JSON.stringify({
+          question: userText,
+          document_id: uuid,
+        }),
+      })
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: res.data.answer },
-      ])
-      setQuestion("")
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(body || `HTTP ${res.status}`)
+      }
+
+      if (!res.body) {
+        throw new Error("No response stream received")
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        if (!chunk) continue
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: `${msg.content}${chunk}` }
+              : msg
+          )
+        )
+      }
+
       setStatus("Answer received.")
     } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Request failed: ${formatError(error, "Unknown ask error")}` },
-      ])
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? { ...msg, content: `Request failed: ${formatError(error, "Unknown ask error")}` }
+            : msg
+        )
+      )
       setStatus("Ask failed.")
     } finally {
       setLoading(false)
@@ -273,7 +303,7 @@ export default function Home() {
         <div className="h-80 overflow-y-auto space-y-4 mb-6 px-2">
           {messages.map((msg, idx) => (
             <div
-              key={idx}
+              key={msg.id || idx}
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
