@@ -42,17 +42,12 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = ""
     OPENROUTER_APP_NAME: str = "RAG Backend"
+    INGESTION_USE_QUEUE: bool = False
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     # Backward-compatible key name used in existing .env files.
     API_KEY: str = ""
-    JWT_AUTH_ENABLED: bool = False
-    JWT_SECRET_KEY: str = ""
-    JWT_ALGORITHM: str = "HS256"
     DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/rag_db"
-    # Optional backend auth key for incoming API requests.
-    # Keep empty to disable request-header auth.
-    BACKEND_API_KEY: str = ""
     RATE_LIMIT_PER_MINUTE: int = 60
 
     CHUNK_SIZE: int = 1000

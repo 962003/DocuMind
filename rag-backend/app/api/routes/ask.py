@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import enforce_rate_limit, require_api_key, require_jwt_token
+from app.api.deps import enforce_rate_limit
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import PDFDocument
@@ -19,10 +19,6 @@ from app.services.llm import generate_answer, generate_answer_stream
 router = APIRouter(tags=["ask"])
 logger = logging.getLogger(__name__)
 route_dependencies = [Depends(enforce_rate_limit)]
-if settings.BACKEND_API_KEY:
-    route_dependencies.append(Depends(require_api_key))
-if settings.JWT_AUTH_ENABLED:
-    route_dependencies.append(Depends(require_jwt_token))
 
 _TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
 

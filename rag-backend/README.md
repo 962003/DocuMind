@@ -16,23 +16,6 @@ Upload now uses a producer-consumer flow:
 - Hybrid retrieval (vector + keyword fusion / RRF)
 - HNSW-first index mapping with compatibility fallback
 - Source citations in `POST /ask` response
-- Optional JWT auth on protected routes
-
-## JWT Auth (Optional)
-
-Set in `.env`:
-
-```env
-JWT_AUTH_ENABLED=true
-JWT_SECRET_KEY=your-strong-secret
-JWT_ALGORITHM=HS256
-```
-
-When enabled, include:
-
-```http
-Authorization: Bearer <jwt_token>
-```
 
 ## Run Redis
 
