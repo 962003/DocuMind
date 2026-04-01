@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rag-backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: rag_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q status"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: rag-backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:root@localhost:5432/rag_db
+          ELASTIC_URL: http://localhost:9200
+          ELASTIC_USER: elastic
+          ELASTIC_PASSWORD: ""
+          LLM_PROVIDER: ollama
+          WARMUP_EMBEDDINGS_ON_STARTUP: "false"
+          WARMUP_LLM_ON_STARTUP: "false"
+        run: pytest tests/ -v
+
+  lint-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rag-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check syntax
+        run: python -m py_compile app/main.py app/core/config.py app/api/router.py

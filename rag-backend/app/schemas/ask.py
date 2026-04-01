@@ -19,3 +19,8 @@ class AskResponse(BaseModel):
     answer: str
     document_id: UUID
     citations: list[Citation] = []
+
+
+class AskedQuestionsResponse(BaseModel):
+    document_id: UUID
+    questions: list[str] = []

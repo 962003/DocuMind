@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     API_KEY: str = ""
     DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/rag_db"
     RATE_LIMIT_PER_MINUTE: int = 60
+    CHAT_HISTORY_WINDOW_TURNS: int = 6
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200

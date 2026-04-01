@@ -20,3 +20,4 @@ class PDFDocument(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    chats = relationship("DocumentChat", back_populates="document", cascade="all, delete-orphan")

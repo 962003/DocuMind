@@ -2,6 +2,7 @@ import logging
 import re
 from functools import lru_cache
 from time import perf_counter
+from uuid import UUID
 
 from elasticsearch import Elasticsearch
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +13,13 @@ from app.api.deps import enforce_rate_limit
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import PDFDocument
-from app.schemas.ask import AskRequest, AskResponse
+from app.schemas.ask import AskRequest, AskResponse, AskedQuestionsResponse
+from app.services.chat_history import (
+    create_user_chat,
+    list_questions,
+    recent_turns_text,
+    save_assistant_response,
+)
 from app.services.embeddings import get_embeddings
 from app.services.llm import generate_answer, generate_answer_stream
 
@@ -177,11 +184,19 @@ def ask(
     db: Session = Depends(get_db),
 ):
     start = perf_counter()
+    chat_id = create_user_chat(db=db, document_id=request.document_id, question=request.question)
+    history_text = recent_turns_text(
+        db=db,
+        document_id=request.document_id,
+        limit=settings.CHAT_HISTORY_WINDOW_TURNS,
+        exclude_chat_id=chat_id,
+    )
     t0 = perf_counter()
     chunks, citations = _retrieve_chunks(request=request, db=db)
     search_total_ms = (perf_counter() - t0) * 1000
     t2 = perf_counter()
-    answer = generate_answer(request.question, chunks)
+    answer = generate_answer(request.question, chunks, chat_history=history_text)
+    save_assistant_response(db=db, chat_id=chat_id, answer=answer)
     llm_ms = (perf_counter() - t2) * 1000
     total_ms = (perf_counter() - start) * 1000
 
@@ -207,18 +222,42 @@ def ask_stream(
     request: AskRequest,
     db: Session = Depends(get_db),
 ):
+    chat_id = create_user_chat(db=db, document_id=request.document_id, question=request.question)
+    history_text = recent_turns_text(
+        db=db,
+        document_id=request.document_id,
+        limit=settings.CHAT_HISTORY_WINDOW_TURNS,
+        exclude_chat_id=chat_id,
+    )
     chunks, _ = _retrieve_chunks(request=request, db=db)
 
     def _stream():
         sent = 0
-        for token in generate_answer_stream(request.question, chunks):
-            if not token:
-                continue
-            remaining = settings.ANSWER_MAX_CHARS - sent
-            if remaining <= 0:
-                break
-            chunk = token[:remaining]
-            sent += len(chunk)
-            yield chunk
+        answer_parts: list[str] = []
+        try:
+            for token in generate_answer_stream(request.question, chunks, chat_history=history_text):
+                if not token:
+                    continue
+                remaining = settings.ANSWER_MAX_CHARS - sent
+                if remaining <= 0:
+                    break
+                chunk = token[:remaining]
+                sent += len(chunk)
+                answer_parts.append(chunk)
+                yield chunk
+        finally:
+            save_assistant_response(
+                db=db,
+                chat_id=chat_id,
+                answer="".join(answer_parts),
+            )
 
     return StreamingResponse(_stream(), media_type="text/plain; charset=utf-8")
+
+
+@router.get("/ask/questions/{document_id}", response_model=AskedQuestionsResponse, dependencies=route_dependencies)
+def asked_questions(document_id: UUID, db: Session = Depends(get_db)):
+    return AskedQuestionsResponse(
+        document_id=document_id,
+        questions=list_questions(db=db, document_id=document_id),
+    )

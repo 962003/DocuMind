@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import axios from "axios"
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "")
@@ -17,8 +17,19 @@ function formatError(error, fallback) {
   return fallback
 }
 
+function cleanAssistantContent(value) {
+  return String(value || "")
+    .replace(/\*\*/g, "")
+    .replace(/LLM request failed:[\s\S]*$/i, "")
+    .trim()
+}
+
+function cleanInline(value) {
+  return String(value || "").replace(/\*\*/g, "").trim()
+}
+
 function AssistantMessage({ content }) {
-  const lines = String(content || "").split("\n")
+  const lines = cleanAssistantContent(content).split("\n")
   const blocks = []
   let i = 0
 
@@ -55,10 +66,25 @@ function AssistantMessage({ content }) {
     if (/^\d+\.\s+/.test(line.trim())) {
       const items = []
       while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^\d+\.\s+/, ""))
+        items.push(cleanInline(lines[i].trim().replace(/^\d+\.\s+/, "")))
         i += 1
       }
       blocks.push({ type: "ol", items })
+      continue
+    }
+
+    if (/^[A-Za-z][A-Za-z0-9\s()\/-]{1,40}:\s+.+$/.test(line.trim())) {
+      const rows = []
+      while (i < lines.length && /^[A-Za-z][A-Za-z0-9\s()\/-]{1,40}:\s+.+$/.test(lines[i].trim())) {
+        const current = cleanInline(lines[i].trim())
+        const sepIdx = current.indexOf(":")
+        rows.push({
+          key: current.slice(0, sepIdx).trim(),
+          value: current.slice(sepIdx + 1).trim(),
+        })
+        i += 1
+      }
+      blocks.push({ type: "kv", rows })
       continue
     }
 
@@ -68,7 +94,7 @@ function AssistantMessage({ content }) {
       paragraph.push(lines[i])
       i += 1
     }
-    blocks.push({ type: "p", content: paragraph.join(" ") })
+    blocks.push({ type: "p", content: cleanInline(paragraph.join(" ")) })
   }
 
   return (
@@ -85,7 +111,7 @@ function AssistantMessage({ content }) {
           return (
             <ul key={idx} className="list-disc pl-5 space-y-1">
               {block.items.map((item, itemIdx) => (
-                <li key={itemIdx}>{item}</li>
+                <li key={itemIdx}>{cleanInline(item)}</li>
               ))}
             </ul>
           )
@@ -94,14 +120,26 @@ function AssistantMessage({ content }) {
           return (
             <ol key={idx} className="list-decimal pl-5 space-y-1">
               {block.items.map((item, itemIdx) => (
-                <li key={itemIdx}>{item}</li>
+                <li key={itemIdx}>{cleanInline(item)}</li>
               ))}
             </ol>
           )
         }
+        if (block.type === "kv") {
+          return (
+            <div key={idx} className="rounded-xl border border-emerald-100 bg-white/70 p-3 space-y-1.5">
+              {block.rows.map((row, rowIdx) => (
+                <div key={rowIdx} className="grid grid-cols-[120px_1fr] gap-2 text-[0.92rem]">
+                  <span className="text-gray-500 font-medium">{row.key}</span>
+                  <span className="text-gray-800">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          )
+        }
         return (
           <p key={idx} className="text-[0.95rem]">
-            {block.content}
+            {cleanInline(block.content)}
           </p>
         )
       })}
@@ -126,6 +164,57 @@ export default function Home() {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState("")
+  const [isListening, setIsListening] = useState(false)
+
+  const recognitionRef = useRef(null)
+  const transcriptRef = useRef("")
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.interimResults = true
+    recognition.continuous = false
+
+    recognition.onresult = (event) => {
+      let interim = ""
+      let finalTranscript = ""
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const value = event.results[i][0]?.transcript || ""
+        if (event.results[i].isFinal) {
+          finalTranscript += value
+        } else {
+          interim += value
+        }
+      }
+
+      transcriptRef.current = `${transcriptRef.current} ${finalTranscript}`.trim()
+      const liveText = `${transcriptRef.current} ${interim}`.trim()
+      setQuestion(liveText)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognition.onerror = () => {
+      setIsListening(false)
+      transcriptRef.current = ""
+      setStatus("Voice input failed. Please try again or type your question.")
+    }
+
+    recognitionRef.current = recognition
+
+    return () => {
+      recognition.stop()
+      recognitionRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (!uuid) return
@@ -194,6 +283,24 @@ export default function Home() {
     } catch (error) {
       setStatus(`Upload failed: ${formatError(error, "Unknown upload error")}`)
     }
+  }
+
+  const startVoiceInput = () => {
+    if (!recognitionRef.current) {
+      setStatus("Voice input is not available in this browser.")
+      return
+    }
+
+    transcriptRef.current = ""
+    setIsListening(true)
+    recognitionRef.current.start()
+  }
+
+  const stopVoiceInput = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
+    setIsListening(false)
   }
 
   const askQuestion = async () => {
@@ -275,11 +382,7 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-gray-800">RAG Document Chat</h1>
           <p className="text-gray-600 mt-2">Ask grounded questions from your uploaded PDF</p>
         </div>
-
-        <div className="text-xs text-gray-500 mb-3 text-center">
-          API: {API_BASE_URL}
-        </div>
-
+        
         <div className="flex items-center justify-between mb-6 bg-white/70 rounded-xl p-4 shadow-sm">
           <input
             type="file"
@@ -328,6 +431,25 @@ export default function Home() {
             placeholder="Ask a question about your document..."
             className="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400"
           />
+
+          <button
+            onClick={isListening ? stopVoiceInput : startVoiceInput}
+            disabled={loading}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            title={isListening ? "Stop voice input" : "Start voice input"}
+            className="ml-3 h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition disabled:opacity-40"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className={`h-5 w-5 ${isListening ? "animate-pulse" : ""}`}
+              aria-hidden="true"
+            >
+              <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v4a3 3 0 0 0 3 3Z" />
+              <path d="M17 11a1 1 0 1 0-2 0 3 3 0 1 1-6 0 1 1 0 1 0-2 0 5 5 0 0 0 4 4.9V19H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-3.1A5 5 0 0 0 17 11Z" />
+            </svg>
+          </button>
 
           <button
             onClick={askQuestion}

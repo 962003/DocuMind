@@ -16,9 +16,13 @@ Answer only from the provided context.
 If the answer is not in context, say: "I do not have enough context to answer this accurately."
 Use simple, user-friendly language.
 Keep the response under 8 short lines.
+Use chat history only for continuity; do not use it as factual source over context.
 Format:
 1) Direct answer (1-3 lines)
 2) Key details (bullet points)
+
+Chat History:
+{chat_history}
 
 Question:
 {question}
@@ -197,21 +201,23 @@ def _get_chain():
     return _PROMPT | llm | StrOutputParser()
 
 
-def _build_prompt(question: str, context_text: str) -> str:
+def _build_prompt(question: str, context_text: str, chat_history: str = "") -> str:
     return (
         "You are a document QA assistant.\n"
         "Answer only from the provided context.\n"
         'If the answer is not in context, say: "I do not have enough context to answer this accurately."\n'
         "Use simple, user-friendly language.\n"
         "Keep the response under 8 short lines.\n"
+        "Use chat history only for continuity; do not use it as factual source over context.\n"
         "Format:\n"
         "1) Direct answer (1-3 lines)\n"
         "2) Key details (bullet points)\n\n"
+        f"Chat History:\n{chat_history or 'None'}\n\n"
         f"Question:\n{question}\n\nContext:\n{context_text}"
     )
 
 
-def generate_answer_stream(question: str, context_chunks: list[str]) -> Iterator[str]:
+def generate_answer_stream(question: str, context_chunks: list[str], chat_history: str = "") -> Iterator[str]:
     if not context_chunks:
         yield "I do not have enough context from the selected document to answer that."
         return
@@ -220,7 +226,7 @@ def generate_answer_stream(question: str, context_chunks: list[str]) -> Iterator
     context_text = "\n\n".join(context_chunks[: settings.ANSWER_MAX_CONTEXT_CHUNKS])[
         : settings.ANSWER_MAX_CONTEXT_CHARS
     ]
-    prompt = _build_prompt(question, context_text)
+    prompt = _build_prompt(question, context_text, chat_history=chat_history)
 
     if provider == "openrouter":
         if not _openrouter_api_key():
@@ -278,14 +284,14 @@ def generate_answer_stream(question: str, context_chunks: list[str]) -> Iterator
 
     try:
         yielded = False
-        for chunk in chain.stream({"question": question, "context": context_text}):
+        for chunk in chain.stream({"question": question, "context": context_text, "chat_history": chat_history or "None"}):
             text = str(chunk)
             if not text:
                 continue
             yielded = True
             yield text
         if not yielded:
-            yield chain.invoke({"question": question, "context": context_text}).strip()
+            yield chain.invoke({"question": question, "context": context_text, "chat_history": chat_history or "None"}).strip()
     except Exception as exc:
         message = str(exc)
         if provider == "groq" and ("invalid_api_key" in message or "401" in message):
@@ -294,8 +300,8 @@ def generate_answer_stream(question: str, context_chunks: list[str]) -> Iterator
         yield f"LLM request failed: {message}"
 
 
-def generate_answer(question: str, context_chunks: list[str]) -> str:
-    return "".join(generate_answer_stream(question, context_chunks))
+def generate_answer(question: str, context_chunks: list[str], chat_history: str = "") -> str:
+    return "".join(generate_answer_stream(question, context_chunks, chat_history=chat_history))
 
 
 def warmup_llm() -> None:

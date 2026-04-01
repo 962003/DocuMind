@@ -17,6 +17,12 @@ Upload now uses a producer-consumer flow:
 - HNSW-first index mapping with compatibility fallback
 - Source citations in `POST /ask` response
 
+Fetch all asked questions tracked for a document (through Ask APIs):
+
+`GET /ask/questions/{document_id}`
+
+Ask interactions are persisted in PostgreSQL table `document_chats`.
+
 ## Run Redis
 
 ```bash
