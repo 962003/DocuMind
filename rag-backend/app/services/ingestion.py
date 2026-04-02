@@ -16,7 +16,6 @@ from app.services.embeddings import get_embeddings
 
 logger = logging.getLogger(__name__)
 
-
 def _get_es_client() -> Elasticsearch:
     return Elasticsearch(
         settings.ELASTIC_URL,

@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from app.schemas.ask import AskRequest, AskResponse, Citation
 
-
 def test_ask_request_valid():
     req = AskRequest(
         question="What is AI?",
