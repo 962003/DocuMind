@@ -456,6 +456,7 @@ export default function Home() {
             disabled={!uuid || !documentReady || loading}
             className="ml-4 bg-gray-800 text-white px-5 py-2 rounded-xl disabled:opacity-40 transition"
           >
+            
             Ask
           </button>
         </div>
