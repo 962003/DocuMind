@@ -3,7 +3,7 @@ import uuid
 import logging
 from typing import List
 
-from langchain_community.document_loaders import PyPDFLoader
+from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,21 @@ from app.services.embeddings import embed_documents
 logger = logging.getLogger(__name__)
 
 
+def _extract_text_from_pdf(file_path: str) -> str:
+    reader = PdfReader(file_path)
+    pages = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            pages.append(text)
+    return "\n\n".join(pages)
+
+
 def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path: str) -> int:
-    loader = PyPDFLoader(file_path)
-    documents = loader.load()
-    if not documents:
+    full_text = _extract_text_from_pdf(file_path)
+    if not full_text.strip():
         pdf_record.index_status = "failed"
-        pdf_record.error_message = "No pages found in PDF"
+        pdf_record.error_message = "No text found in PDF"
         db.commit()
         return 0
 
@@ -28,10 +37,9 @@ def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path
         chunk_size=settings.CHUNK_SIZE,
         chunk_overlap=settings.CHUNK_OVERLAP,
     )
-    chunks = splitter.split_documents(documents)
-    chunk_texts: List[str] = [chunk.page_content for chunk in chunks]
+    chunks = splitter.split_text(full_text)
 
-    vectors = embed_documents(chunk_texts)
+    vectors = embed_documents(chunks)
     if not vectors:
         pdf_record.index_status = "failed"
         pdf_record.error_message = "Embedding generation returned no vectors"
@@ -46,11 +54,11 @@ def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path
         db.commit()
         return 0
 
-    for idx, (chunk, vector) in enumerate(zip(chunks, vectors)):
+    for idx, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
         chunk_record = DocumentChunk(
             document_id=pdf_record.id,
             chunk_index=idx,
-            content=chunk.page_content,
+            content=chunk_text,
             embedding=vector,
         )
         db.add(chunk_record)
