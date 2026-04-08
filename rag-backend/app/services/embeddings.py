@@ -6,7 +6,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_HF_INFERENCE_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/{model}"
+_HF_INFERENCE_URL = "https://router.huggingface.co/pipeline/feature-extraction/{model}"
 
 
 def _hf_embed(texts: list[str]) -> list[list[float]]:
