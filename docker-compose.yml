@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./rag-backend
+      dockerfile: Dockerfile
+    container_name: rag-backend
+    env_file:
+      - ./rag-backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./rag-ui
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_uploads:

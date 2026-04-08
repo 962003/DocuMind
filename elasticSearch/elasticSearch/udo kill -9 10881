@@ -1,0 +1,20 @@
+○ docker.service - Docker Application Container Engine
+     Loaded: loaded (]8;;file://hc-user-IdeaPad-Gaming-3/usr/lib/systemd/system/docker.service/usr/lib/systemd/system/docker.service]8;;; [0;1;32menabled[0m; preset: [0;1;32menabled[0m)
+     Active: inactive (dead) since Wed 2026-03-04 10:56:53 IST; 1min 11s ago
+   Duration: 43.357s
+TriggeredBy: ○ docker.socket
+       Docs: ]8;;https://docs.docker.comhttps://docs.docker.com]8;;
+    Process: 15111 ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock (code=exited, status=0/SUCCESS)
+   Main PID: 15111 (code=exited, status=0/SUCCESS)
+        CPU: 734ms
+
+Mar 04 10:56:10 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:10.241364175+05:30" level=info msg="Completed buildkit initialization"
+Mar 04 10:56:10 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:10.247837832+05:30" level=info msg="Daemon has completed initialization"
+Mar 04 10:56:10 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:10.247974406+05:30" level=info msg="API listen on /run/docker.sock"
+Mar 04 10:56:10 hc-user-IdeaPad-Gaming-3 systemd[1]: Started docker.service - Docker Application Container Engine.
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:53.606036674+05:30" level=info msg="Processing signal 'terminated'"
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 systemd[1]: Stopping docker.service - Docker Application Container Engine...
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:53.608542132+05:30" level=info msg="stopping event stream following graceful shutdown" error="<nil>" module=libcontainerd namespace=moby
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 dockerd[15111]: time="2026-03-04T10:56:53.609511380+05:30" level=info msg="Daemon shutdown complete"
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 systemd[1]: docker.service: Deactivated successfully.
+Mar 04 10:56:53 hc-user-IdeaPad-Gaming-3 systemd[1]: Stopped docker.service - Docker Application Container Engine.

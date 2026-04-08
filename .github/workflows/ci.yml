@@ -28,19 +28,6 @@ jobs:
           --health-timeout 3s
           --health-retries 5
 
-      elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
-        env:
-          discovery.type: single-node
-          xpack.security.enabled: "false"
-        ports:
-          - 9200:9200
-        options: >-
-          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q status"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
 
@@ -52,18 +39,15 @@ jobs:
           cache-dependency-path: rag-backend/requirements.txt
 
       - name: Install dependencies
-        run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run tests
         env:
           DATABASE_URL: postgresql://postgres:root@localhost:5432/rag_db
-          ELASTIC_URL: http://localhost:9200
-          ELASTIC_USER: elastic
-          ELASTIC_PASSWORD: ""
-          LLM_PROVIDER: ollama
-          WARMUP_EMBEDDINGS_ON_STARTUP: "false"
+          QDRANT_URL: ""
+          QDRANT_API_KEY: ""
+          LLM_PROVIDER: groq
+          GROQ_API_KEY: ""
           WARMUP_LLM_ON_STARTUP: "false"
         run: pytest tests/ -v
 
@@ -80,6 +64,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Check syntax
         run: python -m py_compile app/main.py app/core/config.py app/api/router.py

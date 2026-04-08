@@ -53,12 +53,7 @@ async def upload_pdf(
     db.refresh(pdf_record)
 
     try:
-        if settings.INGESTION_USE_QUEUE:
-            from app.worker.tasks import process_pdf_document_task
-
-            process_pdf_document_task.delay(str(pdf_record.id), file_path)
-        else:
-            process_pdf_document_job(str(pdf_record.id), file_path)
+        process_pdf_document_job(str(pdf_record.id), file_path)
     except Exception as exc:
         db.refresh(pdf_record)
         detail = pdf_record.error_message or str(exc)
@@ -67,11 +62,7 @@ async def upload_pdf(
     db.refresh(pdf_record)
 
     return UploadResponse(
-        message=(
-            "Document uploaded successfully. Indexing started."
-            if settings.INGESTION_USE_QUEUE
-            else "Document uploaded and indexed successfully."
-        ),
+        message="Document uploaded and indexed successfully.",
         chunks_created=pdf_record.chunk_count,
         document_id=pdf_record.id,
         index_status=pdf_record.index_status,

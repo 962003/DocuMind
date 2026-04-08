@@ -3,78 +3,16 @@ import uuid
 import logging
 from typing import List
 
-from elasticsearch import Elasticsearch
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.orm import Session
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models import DocumentChunk, PDFDocument
-from app.services.embeddings import get_embeddings
+from app.services.embeddings import embed_documents
 
 logger = logging.getLogger(__name__)
-
-def _get_es_client() -> Elasticsearch:
-    return Elasticsearch(
-        settings.ELASTIC_URL,
-        http_auth=(settings.ELASTIC_USER, settings.ELASTIC_PASSWORD),
-    )
-
-
-def _ensure_index(es: Elasticsearch, dims: int) -> None:
-    if es.indices.exists(index=settings.INDEX_NAME):
-        return
-
-    base_properties = {
-        "content": {"type": "text"},
-        "chunk_id": {"type": "keyword"},
-        "chunk_index": {"type": "integer"},
-        "document_id": {"type": "keyword"},
-    }
-    legacy_mapping = {
-        "mappings": {
-            "properties": {
-                **base_properties,
-                "embedding": {"type": "dense_vector", "dims": dims},
-            }
-        },
-    }
-    hnsw_mapping = {
-        "mappings": {
-            "properties": {
-                **base_properties,
-                "embedding": {
-                    "type": "dense_vector",
-                    "dims": dims,
-                    "index": True,
-                    "similarity": "cosine",
-                    "index_options": {
-                        "type": "hnsw",
-                        "m": settings.HNSW_M,
-                        "ef_construction": settings.HNSW_EF_CONSTRUCTION,
-                    },
-                },
-            }
-        },
-    }
-
-    if settings.ENABLE_HNSW_INDEX:
-        try:
-            es.indices.create(index=settings.INDEX_NAME, body=hnsw_mapping)
-            return
-        except Exception as exc:
-            logger.warning("HNSW index mapping not supported; falling back to dense_vector script_score mapping: %s", exc)
-            if es.indices.exists(index=settings.INDEX_NAME):
-                return
-
-    es.indices.create(index=settings.INDEX_NAME, body=legacy_mapping)
-
-
-@retry(wait=wait_exponential(multiplier=1, min=1, max=8), stop=stop_after_attempt(3), reraise=True)
-def _index_chunk(es: Elasticsearch, document: dict) -> None:
-    es.index(index=settings.INDEX_NAME, document=document)
 
 
 def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path: str) -> int:
@@ -93,7 +31,7 @@ def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path
     chunks = splitter.split_documents(documents)
     chunk_texts: List[str] = [chunk.page_content for chunk in chunks]
 
-    vectors = get_embeddings().embed_documents(chunk_texts)
+    vectors = embed_documents(chunk_texts)
     if not vectors:
         pdf_record.index_status = "failed"
         pdf_record.error_message = "Embedding generation returned no vectors"
@@ -108,34 +46,19 @@ def _ingest_into_existing_record(db: Session, pdf_record: PDFDocument, file_path
         db.commit()
         return 0
 
-    es = _get_es_client()
-    _ensure_index(es, len(vectors[0]))
-
     for idx, (chunk, vector) in enumerate(zip(chunks, vectors)):
         chunk_record = DocumentChunk(
             document_id=pdf_record.id,
             chunk_index=idx,
             content=chunk.page_content,
+            embedding=vector,
         )
         db.add(chunk_record)
-        db.flush()
-
-        _index_chunk(
-            es,
-            {
-                "content": chunk.page_content,
-                "embedding": vector,
-                "chunk_id": str(chunk_record.id),
-                "chunk_index": idx,
-                "document_id": str(pdf_record.id),
-            },
-        )
 
     pdf_record.chunk_count = len(chunks)
     pdf_record.index_status = "completed"
     pdf_record.error_message = None
     db.commit()
-    es.indices.refresh(index=settings.INDEX_NAME)
     return len(chunks)
 
 

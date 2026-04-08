@@ -172,15 +172,6 @@ def _stream_openrouter(prompt: str) -> Iterator[str]:
 @lru_cache(maxsize=1)
 def _get_llm():
     provider = settings.LLM_PROVIDER.lower()
-    if provider == "ollama":
-        from langchain_ollama import ChatOllama
-
-        return ChatOllama(
-            model=settings.LLM_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=settings.LLM_TEMPERATURE,
-            num_predict=settings.LLM_MAX_TOKENS,
-        )
     if provider == "groq":
         if not settings.GROQ_API_KEY:
             return None
@@ -274,6 +265,7 @@ def generate_answer_stream(question: str, context_chunks: list[str], chat_histor
             yield f"LLM request failed: {message}"
             return
 
+    # Default: Groq via LangChain
     chain = _get_chain()
     if chain is None:
         if provider == "groq" and not settings.GROQ_API_KEY:
@@ -305,14 +297,9 @@ def generate_answer(question: str, context_chunks: list[str], chat_history: str 
 
 
 def warmup_llm() -> None:
-    if settings.LLM_PROVIDER.lower() in {"gemini", "openrouter"}:
-        # Skip warmup for paid/limited providers to avoid consuming quota on startup.
+    # Skip warmup for cloud API providers to avoid consuming quota on startup.
+    if settings.LLM_PROVIDER.lower() in {"gemini", "openrouter", "groq"}:
         return
-    chain = _get_chain()
-    if chain is None:
-        return
-    # Warm local model/process so first user query avoids cold-start latency.
-    chain.invoke({"question": "warmup", "context": "warmup"})
 
 
 @lru_cache(maxsize=1)

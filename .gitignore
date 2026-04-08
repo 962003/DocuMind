@@ -23,3 +23,8 @@ Thumbs.db
 
 # Docker
 *.log
+
+# AWS
+awscliv2.zip
+aws/
+apprunner-input.json

@@ -15,7 +15,7 @@ def health():
     elif provider == "openrouter":
         llm_configured = bool(settings.OPENROUTER_API_KEY or settings.API_KEY)
     else:
-        llm_configured = bool(settings.LLM_MODEL)
+        llm_configured = False
     return {
         "status": "ok",
         "app": settings.APP_NAME,
