@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/rag_db"
 
     # --- Embeddings (API-based, replaces local sentence-transformers) ---
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_DIMS: int = 384
     HF_API_TOKEN: str = ""
 

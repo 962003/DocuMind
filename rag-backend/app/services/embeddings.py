@@ -6,17 +6,17 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_HF_INFERENCE_URL = "https://router.huggingface.co/pipeline/feature-extraction/{model}"
+_HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/models/{model}"
 
 
 def _hf_embed(texts: list[str]) -> list[list[float]]:
-    model = parse.quote(settings.EMBEDDING_MODEL, safe="")
+    model = settings.EMBEDDING_MODEL
     url = _HF_INFERENCE_URL.format(model=model)
     headers = {"Content-Type": "application/json"}
     if settings.HF_API_TOKEN:
         headers["Authorization"] = f"Bearer {settings.HF_API_TOKEN}"
 
-    payload = json.dumps({"inputs": texts, "options": {"wait_for_model": True}}).encode()
+    payload = json.dumps({"inputs": texts}).encode()
     req = request.Request(url, data=payload, headers=headers, method="POST")
 
     try:
