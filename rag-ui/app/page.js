@@ -214,7 +214,7 @@ function UploadScreen({ file, setFile, uploadFile, status, documentReady, setSho
 }
 
 /* ─── Chat Screen ─── */
-function ChatScreen({ uuid, documentReady, question, setQuestion, messages, loading, status, askQuestion, isListening, setIsListening, recognitionRef, transcriptRef }) {
+function ChatScreen({ uuid, documentReady, question, setQuestion, messages, loading, status, askQuestion, isListening, setIsListening, recognitionRef, transcriptRef, onBack }) {
   const chatEndRef = useRef(null)
 
   useEffect(() => {
@@ -236,18 +236,32 @@ function ChatScreen({ uuid, documentReady, question, setQuestion, messages, load
 
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Docu<span className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">Mind</span>
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Ask anything about your document</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onBack}
+                className="h-8 w-8 flex items-center justify-center rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-500 transition-all"
+                title="Upload new document"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">
+                  Docu<span className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">Mind</span>
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">Ask anything about your document</p>
+              </div>
             </div>
-            {documentReady && (
-              <span className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                Ready
-              </span>
-            )}
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-full transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              New Document
+            </button>
           </div>
 
           {status && !documentReady && (
@@ -488,6 +502,16 @@ export default function Home() {
     return <UploadScreen file={file} setFile={setFile} uploadFile={uploadFile} status={status} documentReady={documentReady} setShowChat={setShowChat} />
   }
 
+  const handleBack = () => {
+    setShowChat(false)
+    setFile(null)
+    setUuid(null)
+    setDocumentReady(false)
+    setMessages([])
+    setQuestion("")
+    setStatus("")
+  }
+
   return (
     <ChatScreen
       uuid={uuid}
@@ -502,6 +526,7 @@ export default function Home() {
       setIsListening={setIsListening}
       recognitionRef={recognitionRef}
       transcriptRef={transcriptRef}
+      onBack={handleBack}
     />
   )
 }
