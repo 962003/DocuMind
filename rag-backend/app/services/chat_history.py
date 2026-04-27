@@ -77,3 +77,12 @@ def list_questions(db: Session, document_id: UUID) -> list[str]:
         .all()
     )
     return [row.question for row in rows if row.question]
+
+
+def list_turns(db: Session, document_id: UUID) -> list[DocumentChat]:
+    return (
+        db.query(DocumentChat)
+        .filter(DocumentChat.document_id == document_id)
+        .order_by(DocumentChat.created_at.asc())
+        .all()
+    )

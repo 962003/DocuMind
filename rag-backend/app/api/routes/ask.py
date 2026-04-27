@@ -7,14 +7,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import enforce_rate_limit
+from app.api.deps import enforce_rate_limit, get_current_user
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import DocumentChunk, PDFDocument
-from app.schemas.ask import AskRequest, AskResponse, AskedQuestionsResponse
+from app.models import DocumentChunk, PDFDocument, User
+from app.schemas.ask import (
+    AskRequest,
+    AskResponse,
+    AskedQuestionsResponse,
+    ChatHistoryResponse,
+    ChatTurn,
+)
 from app.services.chat_history import (
     create_user_chat,
     list_questions,
+    list_turns,
     recent_turns_text,
     save_assistant_response,
 )
@@ -43,10 +50,15 @@ def _build_citations(chunks: list[tuple]) -> list[dict]:
     return citations
 
 
-def _retrieve_chunks(request: AskRequest, db: Session) -> tuple[list[str], list[dict]]:
-    document = db.get(PDFDocument, request.document_id)
-    if not document:
+def _get_owned_document(db: Session, document_id: UUID, user: User) -> PDFDocument:
+    document = db.get(PDFDocument, document_id)
+    if not document or document.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Document not found")
+    return document
+
+
+def _retrieve_chunks(request: AskRequest, db: Session, user: User) -> tuple[list[str], list[dict]]:
+    document = _get_owned_document(db, request.document_id, user)
     if document.index_status != "completed":
         raise HTTPException(status_code=409, detail=f"Document is not ready. Status: {document.index_status}")
 
@@ -76,7 +88,9 @@ def _retrieve_chunks(request: AskRequest, db: Session) -> tuple[list[str], list[
 def ask(
     request: AskRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    _get_owned_document(db, request.document_id, current_user)
     start = perf_counter()
     chat_id = create_user_chat(db=db, document_id=request.document_id, question=request.question)
     history_text = recent_turns_text(
@@ -86,7 +100,7 @@ def ask(
         exclude_chat_id=chat_id,
     )
     t0 = perf_counter()
-    chunks, citations = _retrieve_chunks(request=request, db=db)
+    chunks, citations = _retrieve_chunks(request=request, db=db, user=current_user)
     search_total_ms = (perf_counter() - t0) * 1000
     t2 = perf_counter()
     answer = generate_answer(request.question, chunks, chat_history=history_text)
@@ -115,7 +129,9 @@ def ask(
 def ask_stream(
     request: AskRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    _get_owned_document(db, request.document_id, current_user)
     chat_id = create_user_chat(db=db, document_id=request.document_id, question=request.question)
     history_text = recent_turns_text(
         db=db,
@@ -123,7 +139,7 @@ def ask_stream(
         limit=settings.CHAT_HISTORY_WINDOW_TURNS,
         exclude_chat_id=chat_id,
     )
-    chunks, _ = _retrieve_chunks(request=request, db=db)
+    chunks, _ = _retrieve_chunks(request=request, db=db, user=current_user)
 
     def _stream():
         sent = 0
@@ -150,8 +166,33 @@ def ask_stream(
 
 
 @router.get("/ask/questions/{document_id}", response_model=AskedQuestionsResponse, dependencies=route_dependencies)
-def asked_questions(document_id: UUID, db: Session = Depends(get_db)):
+def asked_questions(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_document(db, document_id, current_user)
     return AskedQuestionsResponse(
         document_id=document_id,
         questions=list_questions(db=db, document_id=document_id),
     )
+
+
+@router.get("/ask/history/{document_id}", response_model=ChatHistoryResponse, dependencies=route_dependencies)
+def chat_history(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _get_owned_document(db, document_id, current_user)
+    rows = list_turns(db=db, document_id=document_id)
+    turns = [
+        ChatTurn(
+            id=row.id,
+            question=row.question or "",
+            answer=row.answer or "",
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return ChatHistoryResponse(document_id=document_id, turns=turns)

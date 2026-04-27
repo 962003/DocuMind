@@ -4,10 +4,10 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import enforce_rate_limit
+from app.api.deps import enforce_rate_limit, get_current_user
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import PDFDocument
+from app.models import PDFDocument, User
 from app.schemas.upload import UploadResponse
 from app.services.ingestion import process_pdf_document_job
 
@@ -21,6 +21,7 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 async def upload_pdf(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
@@ -43,6 +44,7 @@ async def upload_pdf(
         buffer.write(contents)
 
     pdf_record = PDFDocument(
+        owner_id=current_user.id,
         filename=file.filename,
         file_size=len(contents),
         chunk_count=0,

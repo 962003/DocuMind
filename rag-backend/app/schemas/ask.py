@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 from uuid import UUID
 
@@ -24,3 +25,15 @@ class AskResponse(BaseModel):
 class AskedQuestionsResponse(BaseModel):
     document_id: UUID
     questions: list[str] = []
+
+
+class ChatTurn(BaseModel):
+    id: UUID
+    question: str
+    answer: str
+    created_at: datetime | None = None
+
+
+class ChatHistoryResponse(BaseModel):
+    document_id: UUID
+    turns: list[ChatTurn] = []

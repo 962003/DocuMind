@@ -11,3 +11,15 @@ class DocumentStatusResponse(BaseModel):
     chunks_created: int
     error_message: str | None
     uploaded_at: datetime | None
+
+
+class DocumentSummary(BaseModel):
+    document_id: UUID
+    filename: str
+    index_status: str
+    chunk_count: int
+    uploaded_at: datetime | None
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentSummary] = []

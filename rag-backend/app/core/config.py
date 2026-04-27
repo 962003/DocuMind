@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     CHAT_HISTORY_WINDOW_TURNS: int = 6
 
+    # --- Auth / JWT ---
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 1440
+    ALLOW_SIGNUP: bool = True
+
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     ANSWER_MAX_CONTEXT_CHUNKS: int = 3
