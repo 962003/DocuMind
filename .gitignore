@@ -13,6 +13,9 @@ node_modules/
 # Uploads
 uploads/
 
+# Claude Code
+memory/
+
 # IDE
 .vscode/
 .idea/
