@@ -26,6 +26,14 @@ DocuMind is a full-stack **Retrieval-Augmented Generation** application. It lets
 
 ---
 
+## 🎯 Problem Statement
+
+Organizations sit on large volumes of unstructured documents — contracts, policies, manuals, research — and finding a specific answer means manually reading through pages. Plain keyword search returns *documents*, not *answers*, and a raw LLM will confidently **hallucinate** facts it was never given.
+
+**DocuMind solves both problems:** it grounds a language model in the user's own documents using retrieval-augmented generation, so every answer is (a) drawn only from the source material and (b) backed by **citations** the user can verify — turning a pile of PDFs into a trustworthy, queryable knowledge base.
+
+---
+
 ## 🖼️ Screenshots
 
 > 📷 _Add your own screenshots to `docs/screenshots/` (filenames below) and they'll render here automatically._
@@ -216,6 +224,21 @@ flowchart LR
 
 ---
 
+## 🧭 Architecture Decisions
+
+Key engineering trade-offs and *why* they were made:
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Vector store** | PostgreSQL + `pgvector` | One database for relational data *and* vectors — no separate vector DB to operate. Earlier the project used Elasticsearch; it was consolidated to pgvector to cut infra and ops complexity. |
+| **Embeddings** | HuggingFace Inference API (`bge-small-en-v1.5`) | API-based embeddings avoid shipping a heavy local `sentence-transformers` model, keeping the container small and cold-starts fast. 384 dims balances quality vs. storage. |
+| **LLM** | Groq `llama-3.1-8b-instant` | Extremely low latency + generous free tier for a responsive demo; abstracted behind a provider switch (Groq / Gemini / OpenRouter) to avoid lock-in. |
+| **Anti-hallucination** | Strict context-only prompt | The model is instructed to answer *only* from retrieved context and to explicitly say when the answer isn't present — see [Evaluation](#-evaluation). |
+| **Async indexing** | Status-tracked pipeline | Uploads return immediately and indexing is tracked via `index_status`, so large PDFs don't block the request. |
+| **Auth** | Stateless JWT | No server-side session store needed; scales horizontally and keeps the frontend simple. |
+
+---
+
 ## ✨ Features
 
 - 🔐 **JWT Authentication** — sign-up / login with bcrypt-hashed passwords, strong-password validation, and per-user document isolation.
@@ -229,6 +252,19 @@ flowchart LR
 - 🔁 **Pluggable LLMs** — switch between Groq, Google Gemini, or OpenRouter via config.
 - 🐳 **One-command Deploy** — Dockerized backend + frontend with a guided AWS EC2 deploy script.
 - ✅ **CI Pipeline** — automated tests + lint on every push (GitHub Actions).
+
+---
+
+## 💼 Use Cases
+
+DocuMind's grounded, cited Q&A applies to any domain where answers must be traceable to a source:
+
+| Domain | Application |
+|---|---|
+| ⚖️ **Legal Research** | Analyze contracts and legal documents — surface clauses, obligations, and definitions with citations back to the exact paragraph. |
+| 🧑‍💼 **HR Knowledge Base** | Answer employee policy questions ("How many leave days do I get?") directly from the official handbook. |
+| 🎧 **Customer Support** | Provide contextual answers from product documentation, reducing ticket volume and agent ramp-up time. |
+| 🔍 **Internal Enterprise Search** | Query scattered organizational knowledge — wikis, SOPs, reports — and get a synthesized, sourced answer instead of a list of links. |
 
 ---
 
@@ -405,6 +441,56 @@ curl -X POST http://127.0.0.1:8000/ask \
 cd rag-backend
 pytest tests/ -v        # runs in CI on every push
 ```
+
+---
+
+## 🔒 Security Considerations
+
+Security was designed in, not bolted on:
+
+- **API authentication** — all document/query routes require a valid JWT; every record is scoped to its `owner_id`, so users can only access their own documents.
+- **Input validation** — Pydantic schemas validate every request; strong-password rules (length + upper/lower/digit/special) and email validation on signup.
+- **Secure file uploads** — strict PDF type checking, a 25 MB size cap, and rejection of empty files before any processing.
+- **Rate limiting** — configurable per-minute throttling on protected endpoints to mitigate abuse and brute-force attempts.
+- **Prompt-injection mitigation** — retrieved document text is passed as *context only*; the system prompt instructs the model to treat it as data, not instructions, and to answer strictly from it.
+- **Secrets management** — credentials (DB, API keys, `JWT_SECRET`) live in environment variables and are never committed; `.env` is git-ignored.
+- **Password storage** — passwords are hashed with bcrypt (via passlib), never stored in plaintext.
+
+> See [`SECURITY.md`](SECURITY.md) for the vulnerability disclosure policy.
+
+---
+
+## 📊 Evaluation
+
+RAG systems live or die on answer *trustworthiness*. DocuMind is evaluated along four axes:
+
+| Dimension | How it's addressed |
+|---|---|
+| **Retrieval accuracy** | Top-k cosine-similarity search over `bge-small-en-v1.5` embeddings; `top_k` is tunable per query (1–10). |
+| **Citation quality** | Every answer returns the source chunks with a normalized similarity **score** and snippet, so relevance is inspectable. |
+| **Response relevance** | The prompt constrains the model to the retrieved context and a bounded context window, keeping answers on-topic. |
+| **Hallucination reduction** | The system prompt enforces *"answer only from the provided context"* and returns *"I do not have enough context to answer this accurately"* when the answer isn't found — preventing fabricated responses. |
+
+> An `evaluation_datasets/` harness captures question/answer samples for regression testing of retrieval and answer quality as the pipeline evolves.
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ Completed
+- Document ingestion pipeline
+- RAG query pipeline with citations
+- Semantic (vector) search
+- JWT authentication & per-user isolation
+- Streaming responses & chat history
+- Dockerized deployment + CI
+
+### 🔜 Planned
+- **Multi-tenant support** — organization/workspace scoping
+- **OCR support** — index scanned / image-based PDFs
+- **Voice interface** — ask questions by speech
+- **Agentic workflows** — multi-step reasoning and tool use
+- **Enterprise authentication** — SSO / SAML / OAuth providers
 
 ---
 
