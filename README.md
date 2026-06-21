@@ -69,6 +69,153 @@ flowchart LR
 
 ---
 
+## 🔬 Architecture Deep Dive
+
+### 1. End-to-end user workflow
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Sign up / Log in]
+    B --> C{Has a JWT?}
+    C -->|No| B
+    C -->|Yes| D[Upload PDF]
+    D --> E{Valid PDF?<br/>type · size · not empty}
+    E -->|No| F[Show 400 error] --> D
+    E -->|Yes| G[Indexing pipeline runs]
+    G --> H{index_status}
+    H -->|failed| I[Show error] --> D
+    H -->|completed| J[Ask a question]
+    J --> K[Retrieve top-k chunks]
+    K --> L[LLM answers from context]
+    L --> M[Show answer + citations]
+    M --> N{Ask another?}
+    N -->|Yes| J
+    N -->|No| O([End])
+```
+
+### 2. Document ingestion pipeline (sequence)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Next.js UI
+    participant API as FastAPI /upload
+    participant ING as Ingestion Service
+    participant HF as HuggingFace API
+    participant DB as Postgres + pgvector
+
+    User->>UI: Select PDF
+    UI->>API: POST /upload (Bearer token, multipart)
+    API->>API: Validate type / size / non-empty
+    API->>DB: Create document (status=pending)
+    API->>ING: process_pdf_document_job()
+    ING->>ING: pypdf extract text
+    ING->>ING: Recursive split (1000 / 200)
+    ING->>HF: Embed chunks (bge-small-en-v1.5)
+    HF-->>ING: 384-dim vectors
+    ING->>DB: Bulk insert chunks + embeddings
+    ING->>DB: Update status=completed, chunk_count
+    API-->>UI: { document_id, chunks_created, index_status }
+    UI-->>User: "Indexed ✓ — ready to ask"
+```
+
+### 3. RAG query flow (sequence)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Next.js UI
+    participant API as FastAPI /ask
+    participant EMB as Embedding Service
+    participant DB as pgvector
+    participant LLM as Groq LLM
+
+    User->>UI: Ask a question
+    UI->>API: POST /ask (Bearer token, document_id, top_k)
+    API->>API: Verify ownership + index_status=completed
+    API->>EMB: Embed question
+    EMB-->>API: Query vector
+    API->>DB: ORDER BY embedding <=> query LIMIT top_k
+    DB-->>API: Most similar chunks (+ distances)
+    API->>LLM: Prompt = system + context chunks + question
+    LLM-->>API: Grounded answer
+    API->>DB: Save chat turn (history)
+    API-->>UI: { answer, citations[] }
+    UI-->>User: Answer + source snippets
+```
+
+### 4. Database schema (ER diagram)
+
+```mermaid
+erDiagram
+    USERS ||--o{ PDF_DOCUMENTS : owns
+    PDF_DOCUMENTS ||--o{ DOCUMENT_CHUNKS : "split into"
+    PDF_DOCUMENTS ||--o{ DOCUMENT_CHATS : "has conversation"
+
+    USERS {
+        uuid id PK
+        string name
+        string email UK
+        string hashed_password
+        datetime created_at
+    }
+    PDF_DOCUMENTS {
+        uuid id PK
+        uuid owner_id FK
+        string filename
+        bigint file_size
+        int chunk_count
+        string index_status
+        text error_message
+        datetime uploaded_at
+    }
+    DOCUMENT_CHUNKS {
+        uuid id PK
+        uuid document_id FK
+        int chunk_index
+        text content
+        vector embedding "384-dim"
+        datetime created_at
+    }
+    DOCUMENT_CHATS {
+        uuid id PK
+        uuid document_id FK
+        text question
+        text answer
+        datetime created_at
+    }
+```
+
+### 5. Deployment topology
+
+```mermaid
+flowchart LR
+    subgraph Client
+        BR[Browser]
+    end
+    subgraph Vercel
+        UIc[Next.js UI]
+    end
+    subgraph AWS_EC2[AWS EC2 · Docker Compose]
+        BE[FastAPI container]
+        VOL[(uploads volume)]
+        BE --- VOL
+    end
+    subgraph Managed Services
+        SUPA[(Supabase Postgres<br/>+ pgvector)]
+        HFc[HuggingFace Inference API]
+        GROQ[Groq LLM API]
+    end
+
+    BR -->|HTTPS| UIc
+    UIc -->|REST + streaming| BE
+    BE --> SUPA
+    BE --> HFc
+    BE --> GROQ
+```
+
+---
+
 ## ✨ Features
 
 - 🔐 **JWT Authentication** — sign-up / login with bcrypt-hashed passwords, strong-password validation, and per-user document isolation.
