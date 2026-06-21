@@ -18,6 +18,27 @@ Upload a document, ask questions in plain English, and get grounded answers **wi
 
 ---
 
+## 📑 Table of Contents
+
+- [What it does](#-what-it-does)
+- [Problem Statement](#-problem-statement)
+- [Screenshots](#-screenshots)
+- [Architecture](#-architecture)
+- [Architecture Deep Dive](#-architecture-deep-dive)
+- [Architecture Decisions](#-architecture-decisions)
+- [Features](#-features)
+- [Use Cases](#-use-cases)
+- [Tech Stack](#-tech-stack)
+- [API Documentation](#-api-documentation)
+- [Deployment Guide](#-deployment-guide)
+- [Manual Test Guide](#-manual-test-guide)
+- [Security Considerations](#-security-considerations)
+- [Evaluation](#-evaluation)
+- [Roadmap](#-roadmap)
+- [Project Structure](#-project-structure)
+
+---
+
 ## 📌 What it does
 
 DocuMind is a full-stack **Retrieval-Augmented Generation** application. It lets a user securely upload PDFs, automatically indexes them into a vector database, and answers natural-language questions using a large language model **constrained to the document's content** — so answers stay factual and every claim links back to a source snippet.
